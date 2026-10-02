@@ -1,0 +1,8 @@
+initial high level states
+the game contains
+1.TIMER
+2.SIDE (BLACK , WHITE , RANDOM)
+initial functionalities
+1.set pieces
+2.rotate
+3.validate moves

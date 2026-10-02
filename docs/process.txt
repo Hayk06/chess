@@ -1,0 +1,38 @@
+1. create project CLion
+c++ version 20
+QT version 6
+2. configure the application run/build
+install qt6
+specify and configure QT path /opt/homebrew/opt/qt
+3. define initials
+define piece types / color / points / moves / validations
+define board
+4. game
+define game
+set timer
+set side
+init pieces on board
+define simple moves for pieces
+5.initial qt app view
+welcome page
+timer and side selection + start button
+game play page
+
+QMainWindow — your main application window
+QStackedWidget — switches between your Welcome/Setup page and Board page
+QWidget — base class for each page
+QLabel — welcome text, player information, timer labels
+QPushButton — "Start Game", side selection, etc.
+QRadioButton + QButtonGroup — choose White / Black / Random
+QComboBox — choose a timer preset such as 5+0, 10+0, 10+5
+QSpinBox — useful if you want the player to choose minutes manually
+QTimer — countdown clocks during the game
+QGridLayout — very convenient for your 8×8 chess board
+QVBoxLayout / QHBoxLayout — arrange the UI
+QSizePolicy — useful for making the board resize nicely
+
+
+------------------
+settings , welect main piece
+select points
+set starting positions / mirrored
