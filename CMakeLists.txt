@@ -50,6 +50,8 @@ add_executable(chess MACOSX_BUNDLE
         ui/PlayerPanel.h
         ui/MoveList.h
         ui/MoveList.cpp
+        ui/GameOverDialog.cpp
+        ui/GameOverDialog.h
         ui/GamePage.cpp
         ui/GamePage.h
         ui/PromotionDialog.cpp

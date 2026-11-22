@@ -3,12 +3,16 @@
 //
 
 #include "Side.h"
-#include <iostream>
 #include <random>
+#include <utility>
 
 Side::Side() {
     this->color = Color::NONE;
-    this->captured_points = 0;
+    this->remaining = std::chrono::milliseconds{0};
+}
+
+Side::Side(const Color color, std::string name, const std::chrono::milliseconds remaining)
+    : color(color), name(std::move(name)), remaining(remaining) {
 }
 
 void Side::randomSide() {
@@ -25,10 +29,39 @@ Color Side::getColor() const {
     return color;
 }
 
-void Side::set_captured_points(int points) {
-    captured_points = points;
+void Side::setName(std::string value) {
+    name = std::move(value);
+}
+
+const std::string& Side::getName() const {
+    return name;
+}
+
+void Side::addCapture(const PieceType type) {
+    if (type != PieceType::NONE) {
+        captured.push_back(type);
+    }
+}
+
+const std::vector<PieceType>& Side::getCaptured() const {
+    return captured;
 }
 
 int Side::get_captured_points() const {
-    return captured_points;
+    int total = 0;
+    for (const PieceType type : captured) {
+        const auto found = points.find(type);
+        if (found != points.end()) {
+            total += found->second;
+        }
+    }
+    return total;
+}
+
+void Side::setRemaining(const std::chrono::milliseconds value) {
+    remaining = value;
+}
+
+std::chrono::milliseconds Side::getRemaining() const {
+    return remaining;
 }

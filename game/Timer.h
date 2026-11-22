@@ -6,6 +6,7 @@
 #define CHESS_TIMER_H
 
 enum class Timer {
+    NONE = 0,
     TEN = 10,
     FIVE = 5,
     THREE = 3,

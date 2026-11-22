@@ -3,11 +3,45 @@
 //
 
 #include "GamePage.h"
+#include "GameOverDialog.h"
 #include "PromotionDialog.h"
 #include <QHBoxLayout>
 #include <QPushButton>
 #include <QVBoxLayout>
+#include <QLabel>
 #include <QTimer>
+#include <algorithm>
+
+namespace {
+
+QString formatClock(const std::chrono::milliseconds remaining)
+{
+    const long long seconds = remaining.count() / 1000;
+    return QString("%1:%2")
+        .arg(seconds / 60, 2, 10, QChar('0'))
+        .arg(seconds % 60, 2, 10, QChar('0'));
+}
+
+QString capturedGlyphs(const std::vector<PieceType>& captured)
+{
+    static const ushort solid[] = { 0, 0x265F, 0x265E, 0x265D, 0x265C, 0x265B, 0x265A };
+
+    std::vector<PieceType> sorted = captured;
+    std::sort(sorted.begin(), sorted.end(), [](const PieceType a, const PieceType b) {
+        return static_cast<int>(a) < static_cast<int>(b);
+    });
+
+    QString text;
+    for (const PieceType type : sorted) {
+        const int index = static_cast<int>(type);
+        if (index > 0 && index <= 6) {
+            text += QChar(solid[index]);
+        }
+    }
+    return text;
+}
+
+}
 
 GamePage::GamePage(QWidget* parent)
     : QWidget(parent)
@@ -40,25 +74,101 @@ GamePage::GamePage(QWidget* parent)
     connect(flipButton, &QPushButton::clicked,
             gameView, &GameView::toggleOrientation);
 
+
     connect(gameView, &GameView::boardChanged,
             this, &GamePage::onBoardChanged);
+
+    clockTimer = new QTimer(this);
+    clockTimer->setInterval(100);
+    connect(clockTimer, &QTimer::timeout, this, &GamePage::onClockTick);
 }
 
 void GamePage::startGame(const Side side, const Timer timer)
 {
-    //todo refactor the init of main type
-    game = std::make_unique<Game>(side, timer, PieceType::QUEEN);
-
-    const int minutes = static_cast<int>(timer);
-    const QString clock = QString("%1:00").arg(minutes, 2, 10, QChar('0'));
+    game = std::make_unique<Game>(side, timer, PieceType::KING);
 
     const bool playingWhite = side.getColor() == Color::WHITE;
 
-    topPanel->setPlayer(playingWhite ? "Player 2 (Black)" : "Player 2 (White)", clock);
-    bottomPanel->setPlayer(playingWhite ? "Player 1 (White)" : "Player 1 (Black)", clock);
+    bottomColor = playingWhite ? Color::WHITE : Color::BLACK;
+    topColor    = playingWhite ? Color::BLACK : Color::WHITE;
+
+    lastSide = side;
+    lastTimer = timer;
+    resultShown = false;
 
     gameView->setGame(game.get());
     moveList->clear();
+    refreshPanels();
+
+    if (game->isTimed()) {
+        sinceTick.start();
+        clockTimer->start();
+    } else {
+        clockTimer->stop();
+    }
+}
+
+void GamePage::onClockTick()
+{
+    if (!game || game->isOver()) {
+        clockTimer->stop();
+        return;
+    }
+
+    if (game->getPendingPromotion().row >= 0) {
+        sinceTick.restart();
+        return;
+    }
+
+    game->tick(std::chrono::milliseconds(sinceTick.restart()));
+    refreshPanels();
+
+    if (game->isOver()) {
+        clockTimer->stop();
+        gameView->update();
+        QTimer::singleShot(0, this, &GamePage::showResult);
+    }
+}
+
+void GamePage::showResult()
+{
+    if (!game || resultShown) {
+        return;
+    }
+    resultShown = true;
+
+    const Color winner = game->getWinner();
+    const QString side = winner == Color::WHITE ? "White" : "Black";
+
+    QString title;
+    QString detail;
+
+    switch (game->getResult()) {
+        case GameResult::Checkmate:
+            title = "Checkmate";
+            detail = QString("%1 wins").arg(side);
+            break;
+        case GameResult::Stalemate:
+            title = "Stalemate";
+            detail = "The game is a draw";
+            break;
+        case GameResult::Timeout:
+            title = "Time out";
+            detail = QString("%1 wins on time").arg(side);
+            break;
+        default:
+            resultShown = false;
+            return;
+    }
+
+    GameOverDialog dialog(title, detail, this);
+    dialog.exec();
+
+    if (dialog.action() == GameOverDialog::Rematch) {
+        startGame(lastSide, lastTimer);
+    } else {
+        emit menuRequested();
+    }
 }
 
 void GamePage::onBoardChanged()
@@ -69,6 +179,12 @@ void GamePage::onBoardChanged()
     }
 
     refreshHistory();
+    refreshPanels();
+
+    if (game && game->isOver()) {
+        clockTimer->stop();
+        QTimer::singleShot(0, this, &GamePage::showResult);
+    }
 }
 
 void GamePage::handlePendingPromotion()
@@ -92,6 +208,7 @@ void GamePage::handlePendingPromotion()
 
     gameView->update();
     refreshHistory();
+    refreshPanels();
 }
 
 void GamePage::refreshHistory()
@@ -99,4 +216,24 @@ void GamePage::refreshHistory()
     if (game) {
         moveList->setHistory(game->getHistory());
     }
+}
+
+void GamePage::refreshPanels()
+{
+    if (!game) {
+        return;
+    }
+
+    const Side& top = game->getPlayer(topColor);
+    const Side& bottom = game->getPlayer(bottomColor);
+
+    const bool timed = game->isTimed();
+
+    topPanel->setClock(timed ? formatClock(top.getRemaining()) : QString("--:--"));
+    bottomPanel->setClock(timed ? formatClock(bottom.getRemaining()) : QString("--:--"));
+
+    const int lead = top.get_captured_points() - bottom.get_captured_points();
+
+    topPanel->setCaptured(capturedGlyphs(top.getCaptured()), lead > 0 ? lead : 0);
+    bottomPanel->setCaptured(capturedGlyphs(bottom.getCaptured()), lead < 0 ? -lead : 0);
 }

@@ -3,6 +3,7 @@
 //
 
 #include "Game.h"
+#include <utility>
 
 #include <iostream>
 #include <algorithm>
@@ -19,10 +20,16 @@
 Game::Game(const Side side, const Timer timer, const PieceType main) {
     const Board start;
     this->board = start;
-    this->timer = timer;
     this->side = side;
     this->currentTurn = Color::WHITE;
+
+    const auto budget = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::minutes(static_cast<int>(timer)));
+
+    players[static_cast<int>(Color::WHITE)] = Side(Color::WHITE, "Player 1", budget);
+    players[static_cast<int>(Color::BLACK)] = Side(Color::BLACK, "Player 2", budget);
     this->main = main;
+    this->timed = timer != Timer::NONE;
 
     initBoard();
     initAttackFields();
@@ -62,6 +69,44 @@ void Game::initBoard() {
         for (int j = 0; j < boardSize; j++) {
             if (board.squares[i][j].isEmpty()) continue;
             board.squares[i][j].piece->setStartingPosition({i,j});
+        }
+    }
+
+    markMainPieces();
+    initCastlingRights();
+}
+
+void Game::initCastlingRights() {
+    castlingRights.clear();
+
+    for (const Color color : { Color::WHITE, Color::BLACK }) {
+        const Position mainSquare = findMain(color);
+        if (mainSquare.row < 0) {
+            continue;
+        }
+
+        castlingRights.insert(mainSquare);
+
+        for (int col = 0; col < boardSize; ++col) {
+            const Piece* piece = board.squares[mainSquare.row][col].piece.get();
+            if (piece && piece->type == PieceType::ROOK && piece->color == color) {
+                castlingRights.insert({ mainSquare.row, col });
+            }
+        }
+    }
+}
+
+void Game::markMainPieces() {
+    for (const Color color : { Color::WHITE, Color::BLACK }) {
+        for (int i = 0; i < boardSize; ++i) {
+            for (int j = 0; j < boardSize; ++j) {
+                Piece* piece = board.squares[i][j].piece.get();
+                if (piece && piece->type == main && piece->color == color) {
+                    piece->setMain(true);
+                    i = boardSize;
+                    break;
+                }
+            }
         }
     }
 }
@@ -105,6 +150,10 @@ void Game::initAttackFields() {
 
 
 void Game::clickSquare(const Position square) {
+    if (isOver()) {
+        return;
+    }
+
     if (square.row < 0 || square.row >= Board::size ||
         square.col < 0 || square.col >= Board::size) {
         return;
@@ -174,19 +223,56 @@ void Game::move(const Position from, const Position to) {
     }
 
     const bool promoting = checkPromotion(source.get(), to);
+    const std::optional<CastleMove> castle = castleFor(source.get(), from, to);
+    const Position passant = enPassantCapture(source.get(), from, to);
 
-    const Piece* captured = board.squares[to.row][to.col].piece.get();
+    const bool doubleStep = source->type == PieceType::PAWN &&
+                            (to.row - from.row == 2 || to.row - from.row == -2);
+
+    const Position capturedSquare = passant.row >= 0 ? passant : to;
+    const Piece* captured = castle
+        ? nullptr
+        : board.squares[capturedSquare.row][capturedSquare.col].piece.get();
     std::string fromName = board.squares[from.row][from.col].name;
     std::string toName = board.squares[to.row][to.col].name;
-    const MoveHistory record{
+    MoveHistory record{
         fromName, toName,
         source->type,
         source->color,
         captured ? captured->type : PieceType::NONE,
         currentTurn
     };
+
+    if (castle) {
+        record.castle = castle->rookFrom.col < from.col ? CastleSide::QUEEN : CastleSide::KING;
+    }
+
+    record.enPassant = passant.row >= 0;
+
     setMoveToHistory(record);
-    board.squares[to.row][to.col].piece = std::move(source);
+
+    if (captured) {
+        player(currentTurn).addCapture(captured->type);
+    }
+
+    if (castle) {
+        std::unique_ptr<Piece> rook =
+            std::move(board.squares[castle->rookFrom.row][castle->rookFrom.col].piece);
+        board.squares[to.row][to.col].piece = std::move(source);
+        board.squares[castle->rookTo.row][castle->rookTo.col].piece = std::move(rook);
+        castlingRights.erase(castle->rookFrom);
+    } else {
+        board.squares[to.row][to.col].piece = std::move(source);
+    }
+
+    if (passant.row >= 0) {
+        board.squares[passant.row][passant.col].piece.reset();
+    }
+
+    enPassant = doubleStep ? Position{ (from.row + to.row) / 2, from.col } : Position{};
+
+    castlingRights.erase(from);
+    castlingRights.erase(to);
 
     if (promoting) {
         pendingPromotion = to;
@@ -226,10 +312,20 @@ bool Game::checkPromotion(Piece* piece , Position to) {
 }
 
 void Game::changeTurn() {
-    //check for check / mate / steal mate / clock time out
     currentTurn = currentTurn == Color::WHITE ? Color::BLACK : Color::WHITE;
     initAttackFields();
     checkForCheck();
+
+    const bool inCheck = checkedMain.row >= 0;
+
+    if (!playerMoves()) {
+        result = inCheck ? GameResult::Checkmate : GameResult::Stalemate;
+        winner = inCheck ? turnOpponent() : Color::NONE;
+        end();
+        return;
+    }
+
+    result = inCheck ? GameResult::Check : GameResult::Playing;
 //    board.rotate(board);
 }
 
@@ -242,19 +338,9 @@ void Game::checkForCheck() {
     if (position.row >= 0 && attackPositionCheck(position)) {
         checkedMain = position;
 
-        if (!playerMoves()) {
-            end();
-            return;
-        }
-
-
         if (!history.empty()) {
             history.back().givesCheck = true;
         }
-        return;
-    }
-    if (!playerMoves()) {
-        end();
     }
 }
 
@@ -308,18 +394,129 @@ bool Game::attackPositionCheck(Position position) {
 std::vector<Position> Game::filterMoves(const Piece* piece, const Position from) {
     std::vector<Position> moves = piece->moves(board, from);
 
-    std::erase_if(moves, [this, from](const Position& to) {
-        return leavesMainAttacked(from, to);
+    for (const CastleMove& option : castleOptions(piece, from)) {
+        moves.push_back(option.kingTo);
+    }
+
+    if (enPassantCapture(piece, from, enPassant).row >= 0) {
+        moves.push_back(enPassant);
+    }
+
+    std::erase_if(moves, [this, piece, from](const Position& to) {
+        return leavesMainAttacked(from, to, enPassantCapture(piece, from, to));
     });
 
     return moves;
+}
+
+std::vector<CastleMove> Game::castleOptions(const Piece* piece, const Position from) {
+    std::vector<CastleMove> options;
+
+    if (!piece || !piece->getMain() || !castlingRights.contains(from)) {
+        return options;
+    }
+
+    if (attackPositionCheck(from)) {
+        return options;
+    }
+
+    for (int col = 0; col < boardSize; ++col) {
+        const Position rookFrom{ from.row, col };
+
+        if (col == from.col || !castlingRights.contains(rookFrom)) {
+            continue;
+        }
+
+        const Piece* rook = board.squares[rookFrom.row][rookFrom.col].piece.get();
+        if (!rook || rook->type != PieceType::ROOK || rook->color != piece->color) {
+            continue;
+        }
+
+        const int step = col < from.col ? -1 : 1;
+        const Position kingTo{ from.row, from.col + 2 * step };
+        const Position rookTo{ from.row, from.col + step };
+
+        if (kingTo.col < 0 || kingTo.col >= boardSize) {
+            continue;
+        }
+
+        const Piece* landing = board.squares[kingTo.row][kingTo.col].piece.get();
+        if (landing && landing != rook) {
+            continue;
+        }
+
+        if (!castlePathClear(from, rookFrom) || !castleKingPathSafe(from, kingTo)) {
+            continue;
+        }
+
+        options.push_back({ kingTo, rookFrom, rookTo });
+    }
+
+    return options;
+}
+
+Position Game::enPassantCapture(const Piece* piece, const Position from, const Position to) const {
+    if (!piece || piece->type != PieceType::PAWN || enPassant.row < 0 || to != enPassant) {
+        return {};
+    }
+
+    if (!board.squares[to.row][to.col].isEmpty()) {
+        return {};
+    }
+
+    const int step = piece->color == Color::WHITE ? -1 : 1;
+    const int sideStep = to.col - from.col;
+
+    if (to.row != from.row + step || (sideStep != 1 && sideStep != -1)) {
+        return {};
+    }
+
+    const Position victimSquare{ from.row, to.col };
+    const Piece* victim = board.squares[victimSquare.row][victimSquare.col].piece.get();
+
+    if (!victim || victim->type != PieceType::PAWN || victim->color == piece->color) {
+        return {};
+    }
+
+    return victimSquare;
+}
+
+std::optional<CastleMove> Game::castleFor(const Piece* piece, const Position from, const Position to) {
+    for (const CastleMove& option : castleOptions(piece, from)) {
+        if (option.kingTo == to) {
+            return option;
+        }
+    }
+    return std::nullopt;
+}
+
+bool Game::castlePathClear(const Position from, const Position rookFrom) const {
+    const int step = rookFrom.col > from.col ? 1 : -1;
+
+    for (int col = from.col + step; col != rookFrom.col; col += step) {
+        if (!board.squares[from.row][col].isEmpty()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool Game::castleKingPathSafe(const Position from, const Position kingTo) {
+    const int step = kingTo.col > from.col ? 1 : -1;
+
+    for (int col = from.col + step; col != kingTo.col; col += step) {
+        if (attackPositionCheck({ from.row, col })) {
+            return false;
+        }
+    }
+    return true;
 }
 
 Position Game::findMain(const Color color) const {
     for (int i = 0; i < boardSize; ++i) {
         for (int j = 0; j < boardSize; ++j) {
             const Piece* piece = board.squares[i][j].piece.get();
-            if (piece && piece->type == main && piece->color == color) {
+            if (piece && piece->getMain() && piece->color == color) {
                 return { i, j };
             }
         }
@@ -327,7 +524,7 @@ Position Game::findMain(const Color color) const {
     return {};
 }
 
-bool Game::leavesMainAttacked(const Position from, const Position to) {
+bool Game::leavesMainAttacked(const Position from, const Position to, const Position removed) {
     std::unique_ptr<Piece>& source = board.squares[from.row][from.col].piece;
     std::unique_ptr<Piece>& target = board.squares[to.row][to.col].piece;
 
@@ -341,12 +538,21 @@ bool Game::leavesMainAttacked(const Position from, const Position to) {
     std::unique_ptr<Piece> captured = std::move(target);
     target = std::move(moving);
 
+    std::unique_ptr<Piece> passed;
+    if (removed.row >= 0) {
+        passed = std::move(board.squares[removed.row][removed.col].piece);
+    }
+
     bool attacked = false;
     const Position main = findMain(mover);
     if (main.row >= 0) {
         const std::set<Position> enemyAttacks =
             calcAttackFields(mover == Color::WHITE ? Color::BLACK : Color::WHITE);
         attacked = enemyAttacks.count(main) > 0;
+    }
+
+    if (removed.row >= 0) {
+        board.squares[removed.row][removed.col].piece = std::move(passed);
     }
 
     source = std::move(target);
@@ -371,6 +577,48 @@ const std::vector<MoveHistory>& Game::getHistory() const { return history; }
 const std::vector<Position>& Game::getTargets() const { return selectedTargets; }
 Position Game::getCheckedMain() const { return checkedMain; }
 Position Game::getPendingPromotion() const { return pendingPromotion; }
+
+Side& Game::player(const Color color) {
+    return players[static_cast<int>(color)];
+}
+
+GameResult Game::getResult() const { return result; }
+Color Game::getWinner() const { return winner; }
+
+bool Game::isTimed() const { return timed; }
+
+bool Game::isOver() const {
+    return result == GameResult::Checkmate
+        || result == GameResult::Stalemate
+        || result == GameResult::Timeout;
+}
+
+void Game::tick(const std::chrono::milliseconds elapsed) {
+    if (!timed || isOver()) {
+        return;
+    }
+
+    Side& active = player(currentTurn);
+    const std::chrono::milliseconds left = active.getRemaining() - elapsed;
+
+    if (left <= std::chrono::milliseconds::zero()) {
+        active.setRemaining(std::chrono::milliseconds::zero());
+        result = GameResult::Timeout;
+        winner = turnOpponent();
+        end();
+        return;
+    }
+
+    active.setRemaining(left);
+}
+
+const Side& Game::getPlayer(const Color color) const {
+    return players[static_cast<int>(color)];
+}
+
+void Game::setPlayerName(const Color color, std::string name) {
+    player(color).setName(std::move(name));
+}
 
 //todo error and fix , in ui display check ++
 //the pieces moves function logic should be change and each piece should return the vector of all positions that it

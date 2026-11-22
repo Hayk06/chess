@@ -36,3 +36,11 @@ QSizePolicy — useful for making the board resize nicely
 settings , welect main piece
 select points
 set starting positions / mirrored
+win
+draw
+end game
+restart
+rematch
+history move
+save game
+castle

@@ -40,6 +40,14 @@ std::vector<Position> Piece::slide(const Board& board, const Position from) cons
     return result;
 }
 
+void Piece::setMain(const bool value) {
+    isMain = value;
+}
+
+bool Piece::getMain() const {
+    return isMain;
+}
+
 void Piece::setStartingPosition(Position position) {
         startingPosition = position;
 }

@@ -9,6 +9,12 @@
 #include "../shared/Color.h"
 #include <string>
 
+enum class CastleSide {
+    NONE,
+    KING,
+    QUEEN
+};
+
 struct MoveHistory {
     std::string  from;
     std::string  to;
@@ -18,5 +24,7 @@ struct MoveHistory {
     Color     turn         = Color::NONE;
     bool      givesCheck   = false;
     PieceType promotedTo   = PieceType::NONE;
+    CastleSide castle      = CastleSide::NONE;
+    bool      enPassant    = false;
 };
 #endif //CHESS_MOVEHISTORY_H

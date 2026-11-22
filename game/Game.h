@@ -10,15 +10,33 @@
 #include "../board/Board.h"
 #include "../board/Position.h"
 #include <map>
+#include <array>
 #include <vector>
 #include <set>
+#include <optional>
 
 #include "MoveHistory.h"
+#include <chrono>
+
+enum class GameResult {
+    Playing,
+    Check,
+    Checkmate,
+    Stalemate,
+    Timeout
+};
+
+struct CastleMove {
+    Position kingTo;
+    Position rookFrom;
+    Position rookTo;
+};
 
 class Game {
     public:
         Game(const Side side, const Timer timer , const PieceType main);
         void initBoard();
+
 
         void clickSquare(Position square);
 
@@ -39,10 +57,20 @@ class Game {
 
         Position getPendingPromotion() const;
 
+        const Side& getPlayer(Color color) const;
+
+        GameResult getResult() const;
+        Color getWinner() const;
+        bool isOver() const;
+        bool isTimed() const;
+
+        void tick(std::chrono::milliseconds elapsed);
+        void setPlayerName(Color color, std::string name);
+
     private:
         Board board;
-        Timer timer;
         Side side;
+        std::array<Side, 3> players;
         std::map<Color, u_int64_t> attacks;
         PieceType main;
 
@@ -54,6 +82,13 @@ class Game {
         Color currentTurn;
         Position checkedMain;
         Position pendingPromotion;
+        Position enPassant;
+        std::set<Position> castlingRights;
+        bool timed = true;
+        GameResult result = GameResult::Playing;
+        Color winner = Color::NONE;
+
+        Side& player(Color color);
 
         void clearSelection();
         bool hasSelection() const;
@@ -71,8 +106,15 @@ class Game {
         bool checkPromotion(Piece* piece , Position to);
         bool attackPositionCheck(Position position);
         Color turnOpponent() const;
+        void initCastlingRights();
+        std::vector<CastleMove> castleOptions(const Piece* piece, Position from);
+        std::optional<CastleMove> castleFor(const Piece* piece, Position from, Position to);
+        bool castlePathClear(Position from, Position rookFrom) const;
+        bool castleKingPathSafe(Position from, Position kingTo);
+        Position enPassantCapture(const Piece* piece, Position from, Position to) const;
+        void markMainPieces();
         Position findMain(Color color) const;
-        bool leavesMainAttacked(Position from, Position to);
+        bool leavesMainAttacked(Position from, Position to, Position removed = {});
 };
 
 #endif //CHESS_GAME_H

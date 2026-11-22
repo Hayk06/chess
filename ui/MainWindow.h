@@ -27,6 +27,7 @@ private:
     QRadioButton* whiteRadio{};
     QRadioButton* blackRadio{};
     QPushButton* startButton{};
+
     QStackedWidget* pages;
 
     GamePage* gamePage{};

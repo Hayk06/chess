@@ -15,11 +15,10 @@ class PlayerPanel : public QWidget
 public:
     explicit PlayerPanel(QWidget* parent = nullptr);
 
-    void setPlayer(const QString& name, const QString& clock);
+    void setClock(const QString& clock);
     void setCaptured(const QString& pieces, int points);
 
 private:
-    QLabel* nameLabel{};
     QLabel* capturedLabel{};
     QLabel* clockLabel{};
 };

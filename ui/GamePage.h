@@ -4,6 +4,7 @@
 
 #ifndef CHESS_GAMEPAGE_H
 #define CHESS_GAMEPAGE_H
+#include <QElapsedTimer>
 #include <QWidget>
 #include <memory>
 
@@ -15,6 +16,7 @@
 #include "../game/Timer.h"
 
 class QPushButton;
+class QTimer;
 
 class GamePage : public QWidget
 {
@@ -25,16 +27,32 @@ public:
 
     void startGame(Side side, Timer timer);
 
+signals:
+    void rematchRequested();
+    void menuRequested();
+
 private:
     void onBoardChanged();
     void handlePendingPromotion();
     void refreshHistory();
+    void refreshPanels();
+    void onClockTick();
+    void showResult();
 
     GameView* gameView{};
     PlayerPanel* topPanel{};
     PlayerPanel* bottomPanel{};
     MoveList* moveList{};
     QPushButton* flipButton{};
+    QTimer* clockTimer{};
+    bool resultShown = false;
+
+    Side lastSide{};
+    Timer lastTimer = Timer::FIVE;
+    QElapsedTimer sinceTick;
+
+    Color topColor = Color::BLACK;
+    Color bottomColor = Color::WHITE;
 
     std::unique_ptr<Game> game{};
 };

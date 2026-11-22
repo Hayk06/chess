@@ -124,6 +124,7 @@ void MainWindow::setupWelcomePage()
     timerCombo->addItem("3 minutes", static_cast<int>(Timer::THREE));
     timerCombo->addItem("5 minutes", static_cast<int>(Timer::FIVE));
     timerCombo->addItem("10 minutes", static_cast<int>(Timer::TEN));
+    timerCombo->addItem("No limit", static_cast<int>(Timer::NONE));
 
     startButton = new QPushButton("Start Game");
 
@@ -156,8 +157,13 @@ void MainWindow::setupWelcomePage()
     });
 }
 
-
-void MainWindow::setupGamePage() {
+void MainWindow::setupGamePage()
+{
     gamePage = new GamePage;
     pages->addWidget(gamePage);
+
+    connect(gamePage, &GamePage::menuRequested, this, [this]() {
+        pages->setCurrentIndex(0);
+    });
 }
+

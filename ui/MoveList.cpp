@@ -46,6 +46,14 @@ QString MoveList::describe(const MoveHistory& move)
 {
     static const char* letters = " NBRQK";
 
+    if (move.castle != CastleSide::NONE) {
+        QString castling = move.castle == CastleSide::KING ? "O-O" : "O-O-O";
+        if (move.givesCheck) {
+            castling += QChar('+');
+        }
+        return castling;
+    }
+
     QString text;
     if (move.movedType != PieceType::PAWN && move.movedType != PieceType::NONE) {
         text += QChar(letters[static_cast<int>(move.movedType) - 1]);
@@ -58,6 +66,10 @@ QString MoveList::describe(const MoveHistory& move)
     if (move.promotedTo != PieceType::NONE) {
         text += QChar('=');
         text += QChar(letters[static_cast<int>(move.promotedTo) - 1]);
+    }
+
+    if (move.enPassant) {
+        text += " e.p.";
     }
 
     if (move.givesCheck) {

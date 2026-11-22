@@ -20,11 +20,14 @@ class Piece {
         Color color = Color::NONE;
         int point = 0;
         Position startingPosition;
+        bool isMain = false;
 
         Piece(PieceType type, Color color, int point)
             : type(type), color(color), point(point) {}
 
         void setStartingPosition(Position position);
+        void setMain(bool value);
+        bool getMain() const;
 
         bool isEmpty() const { return type == PieceType::NONE; }
 
