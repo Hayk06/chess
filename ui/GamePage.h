@@ -26,6 +26,7 @@ public:
     explicit GamePage(QWidget* parent = nullptr);
 
     void startGame(Side side, Timer timer);
+    void resumeGame(std::unique_ptr<Game> loaded);
 
 signals:
     void rematchRequested();
@@ -38,12 +39,14 @@ private:
     void refreshPanels();
     void onClockTick();
     void showResult();
+    void onSave();
 
     GameView* gameView{};
     PlayerPanel* topPanel{};
     PlayerPanel* bottomPanel{};
     MoveList* moveList{};
     QPushButton* flipButton{};
+    QPushButton* saveButton{};
     QTimer* clockTimer{};
     bool resultShown = false;
 

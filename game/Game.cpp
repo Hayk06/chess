@@ -29,6 +29,7 @@ Game::Game(const Side side, const Timer timer, const PieceType main) {
     players[static_cast<int>(Color::WHITE)] = Side(Color::WHITE, "Player 1", budget);
     players[static_cast<int>(Color::BLACK)] = Side(Color::BLACK, "Player 2", budget);
     this->main = main;
+    this->timer = timer;
     this->timed = timer != Timer::NONE;
 
     initBoard();
@@ -582,6 +583,9 @@ Side& Game::player(const Color color) {
     return players[static_cast<int>(color)];
 }
 
+Timer Game::getTimer() const { return timer; }
+PieceType Game::getMainType() const { return main; }
+
 GameResult Game::getResult() const { return result; }
 Color Game::getWinner() const { return winner; }
 
@@ -614,6 +618,10 @@ void Game::tick(const std::chrono::milliseconds elapsed) {
 
 const Side& Game::getPlayer(const Color color) const {
     return players[static_cast<int>(color)];
+}
+
+void Game::setRemaining(const Color color, const std::chrono::milliseconds value) {
+    player(color).setRemaining(value);
 }
 
 void Game::setPlayerName(const Color color, std::string name) {

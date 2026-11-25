@@ -59,12 +59,16 @@ class Game {
 
         const Side& getPlayer(Color color) const;
 
+        Timer getTimer() const;
+        PieceType getMainType() const;
+
         GameResult getResult() const;
         Color getWinner() const;
         bool isOver() const;
         bool isTimed() const;
 
         void tick(std::chrono::milliseconds elapsed);
+        void setRemaining(Color color, std::chrono::milliseconds value);
         void setPlayerName(Color color, std::string name);
 
     private:
@@ -73,6 +77,7 @@ class Game {
         std::array<Side, 3> players;
         std::map<Color, u_int64_t> attacks;
         PieceType main;
+        Timer timer = Timer::FIVE;
 
         //todo add a piece member called main for king switch?
 

@@ -5,6 +5,10 @@
 #include "GamePage.h"
 #include "GameOverDialog.h"
 #include "PromotionDialog.h"
+#include "../game/GameFile.h"
+#include <QDir>
+#include <QFileDialog>
+#include <QMessageBox>
 #include <QHBoxLayout>
 #include <QPushButton>
 #include <QVBoxLayout>
@@ -62,17 +66,21 @@ GamePage::GamePage(QWidget* parent)
     boardColumn->addWidget(bottomPanel);
 
     flipButton = new QPushButton("Flip board");
+    saveButton = new QPushButton("Save game");
 
     auto* sideColumn = new QVBoxLayout;
     sideColumn->setSpacing(8);
     sideColumn->addWidget(moveList, 1);
     sideColumn->addWidget(flipButton);
+    sideColumn->addWidget(saveButton);
 
     layout->addLayout(boardColumn, 1);
     layout->addLayout(sideColumn);
 
     connect(flipButton, &QPushButton::clicked,
             gameView, &GameView::toggleOrientation);
+
+    connect(saveButton, &QPushButton::clicked, this, &GamePage::onSave);
 
 
     connect(gameView, &GameView::boardChanged,
@@ -85,26 +93,59 @@ GamePage::GamePage(QWidget* parent)
 
 void GamePage::startGame(const Side side, const Timer timer)
 {
-    game = std::make_unique<Game>(side, timer, PieceType::KING);
+    resumeGame(std::make_unique<Game>(side, timer, PieceType::KING));
+}
 
-    const bool playingWhite = side.getColor() == Color::WHITE;
+void GamePage::resumeGame(std::unique_ptr<Game> loaded)
+{
+    if (!loaded) {
+        return;
+    }
+
+    game = std::move(loaded);
+
+    const bool playingWhite = game->getSide().getColor() == Color::WHITE;
 
     bottomColor = playingWhite ? Color::WHITE : Color::BLACK;
     topColor    = playingWhite ? Color::BLACK : Color::WHITE;
 
-    lastSide = side;
-    lastTimer = timer;
+    lastSide = game->getSide();
+    lastTimer = game->getTimer();
     resultShown = false;
 
     gameView->setGame(game.get());
-    moveList->clear();
+    refreshHistory();
     refreshPanels();
 
-    if (game->isTimed()) {
+    if (game->isTimed() && !game->isOver()) {
         sinceTick.start();
         clockTimer->start();
     } else {
         clockTimer->stop();
+    }
+}
+
+void GamePage::onSave()
+{
+    if (!game) {
+        return;
+    }
+
+    const bool running = clockTimer->isActive();
+    if (running) {
+        clockTimer->stop();
+    }
+
+    const QString path = QFileDialog::getSaveFileName(this, "Save game",
+        QDir::homePath() + "/game.chess", "Chess games (*.chess)");
+
+    if (!path.isEmpty() && !GameFile::save(*game, path.toStdString())) {
+        QMessageBox::warning(this, "Save game", "Could not write " + path);
+    }
+
+    if (running) {
+        sinceTick.restart();
+        clockTimer->start();
     }
 }
 

@@ -60,6 +60,8 @@ add_executable(chess MACOSX_BUNDLE
         pieces/PieceFactory.h
         ui/PlayerPanel.cpp
         game/MoveHistory.h
+        game/GameFile.h
+        game/GameFile.cpp
 )
 
 set_target_properties(chess PROPERTIES

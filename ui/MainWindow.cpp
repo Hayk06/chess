@@ -12,11 +12,15 @@
 #include <QButtonGroup>
 #include <QStackedWidget>
 #include <QScreen>
+#include <QDir>
+#include <QFileDialog>
+#include <QMessageBox>
 #include <QGuiApplication>
 #include <QWindow>
 #include "../game/Side.h"
 #include "../game/Timer.h"
 #include "../game/Game.h"
+#include "../game/GameFile.h"
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
@@ -127,6 +131,7 @@ void MainWindow::setupWelcomePage()
     timerCombo->addItem("No limit", static_cast<int>(Timer::NONE));
 
     startButton = new QPushButton("Start Game");
+    loadButton = new QPushButton("Load game");
 
     layout->addWidget(title);
     layout->addWidget(sideLabel);
@@ -134,6 +139,7 @@ void MainWindow::setupWelcomePage()
     layout->addWidget(timerLabel);
     layout->addWidget(timerCombo);
     layout->addWidget(startButton);
+    layout->addWidget(loadButton);
 
     pages->addWidget(page);
 
@@ -153,6 +159,26 @@ void MainWindow::setupWelcomePage()
 
         gamePage->startGame(side, timer);
 
+        pages->setCurrentWidget(gamePage);
+    });
+
+    connect(loadButton, &QPushButton::clicked, this, [this]()
+    {
+        const QString path = QFileDialog::getOpenFileName(this, "Load game",
+            QDir::homePath(), "Chess games (*.chess)");
+
+        if (path.isEmpty()) {
+            return;
+        }
+
+        std::unique_ptr<Game> loaded = GameFile::load(path.toStdString());
+
+        if (!loaded) {
+            QMessageBox::warning(this, "Load game", "Could not read " + path);
+            return;
+        }
+
+        gamePage->resumeGame(std::move(loaded));
         pages->setCurrentWidget(gamePage);
     });
 }
